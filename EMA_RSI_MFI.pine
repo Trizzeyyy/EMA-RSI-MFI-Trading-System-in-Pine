@@ -1,0 +1,164 @@
+// Coded by .trizzey (Discord)
+// Coded by .trizzey (Discord)
+// Coded by .trizzey (Discord)
+// Coded by .trizzey (Discord)
+// Coded by .trizzey (Discord)
+//@version=5
+indicator("EMA Trend with RSI and MFI", overlay=true)
+
+// EMA settings (by .trizzey)
+shortEMA = ta.ema(close, 25)
+mediumEMA = ta.ema(close, 50)
+longEMA = ta.ema(close, 200)
+
+// EMA colors based on trend (by .trizzey)
+shortEmaColor = shortEMA > shortEMA[1] ? color.green : color.red
+mediumEmaColor = mediumEMA > mediumEMA[1] ? color.green : color.red
+longEmaColor = longEMA > longEMA[1] ? color.green : color.red
+
+// Plot EMAs (by .trizzey)
+plot(shortEMA, "EMA 25", color=shortEmaColor, linewidth=2)
+plot(mediumEMA, "EMA 50", color=mediumEmaColor, linewidth=2)
+plot(longEMA, "EMA 200", color=longEmaColor, linewidth=2)
+
+// Inputs for RSI and MFI lengths (by .trizzey)
+rsiLength = input.int(14, title="RSI Length")
+mfiLength = input.int(14, title="MFI Length")
+
+// Inputs for overbought and oversold levels (by .trizzey)
+rsiOverboughtLevel = input.int(70, title="RSI Overbought Level")
+rsiOversoldLevel = input.int(30, title="RSI Oversold Level")
+mfiOverboughtLevel = input.int(80, title="MFI Overbought Level")
+mfiOversoldLevel = input.int(20, title="MFI Oversold Level")
+
+// Calculate RSI and MFI (by .trizzey)
+rsi = ta.rsi(close, rsiLength)
+mfi = ta.mfi((high + low + close) / 3, mfiLength)
+
+// RSI and MFI signals with overbought/oversold conditions (by .trizzey)
+rsiSignal = rsi > rsiOverboughtLevel ? "Overbought" : rsi < rsiOversoldLevel ? "Oversold" : rsi > 50 ? "Bullish" : rsi < 50 ? "Bearish" : "Neutral"
+mfiSignal = mfi > mfiOverboughtLevel ? "Overbought" : mfi < mfiOversoldLevel ? "Oversold" : mfi > 50 ? "Bullish" : mfi < 50 ? "Bearish" : "Neutral"
+
+// Timeframe (by .trizzey)
+timeframeStr = timeframe.period
+
+// Main table settings (by .trizzey)
+var table resultsTable = table.new(position.top_right, 2, 4, border_width=1)
+
+// Update main table (by .trizzey)
+if bar_index > 0
+    table.cell(resultsTable, 0, 0, "Timeframe", bgcolor=color.white)
+    table.cell(resultsTable, 1, 0, timeframeStr, bgcolor=color.white)
+    table.cell(resultsTable, 0, 1, "RSI", bgcolor=color.white)
+    table.cell(resultsTable, 1, 1, rsiSignal, bgcolor=(rsiSignal == "Oversold" or rsiSignal == "Bullish") ? color.green : (rsiSignal == "Overbought" or rsiSignal == "Bearish") ? color.red : color.white)
+    table.cell(resultsTable, 0, 2, "MFI", bgcolor=color.white)
+    table.cell(resultsTable, 1, 2, mfiSignal, bgcolor=(mfiSignal == "Oversold" or mfiSignal == "Bullish") ? color.green : (mfiSignal == "Overbought" or mfiSignal == "Bearish") ? color.red : color.white)
+
+// Success rate calculation (by .trizzey)
+var int buySignalCount = 0
+var int sellSignalCount = 0
+var string currentTrend = na
+var int candlesSinceTrendChange = 0
+var int[] signalBarIndexes = array.new_int(0)
+var string[] signalTypes = array.new_string(0)
+var float[] signalPrices = array.new_float(0)
+
+// Input for the number of candles to wait after a trend change (by .trizzey)
+candlesToWait = input.int(20, title="Candles to Wait After Trend Change")
+
+// Determine trend (by .trizzey)
+trend = shortEmaColor == color.green and mediumEmaColor == color.green and longEmaColor == color.green ? "up" : "down"
+
+// Check if all EMAs changed color (by .trizzey)
+emaColorChanged = shortEmaColor != shortEmaColor[1] and mediumEmaColor != mediumEmaColor[1] and longEmaColor != longEmaColor[1]
+
+// Reset signal counts and candle counter on trend change (by .trizzey)
+if trend != currentTrend and emaColorChanged
+    buySignalCount := 0
+    sellSignalCount := 0
+    candlesSinceTrendChange := 0
+    currentTrend := trend
+else
+    candlesSinceTrendChange := candlesSinceTrendChange + 1
+
+// Buy and Sell conditions (by .trizzey)
+buyCondition = (shortEmaColor == color.green) and 
+               (mediumEmaColor == color.green) and 
+               (longEmaColor == color.green) and 
+               ((rsiSignal == "Bullish") or (rsiSignal == "Oversold")) and 
+               ((mfiSignal == "Bullish") or (mfiSignal == "Oversold"))
+
+sellCondition = (shortEmaColor == color.red) and
+               (mediumEmaColor == color.red) and 
+               (longEmaColor == color.red) and 
+               ((rsiSignal == "Bearish") or (rsiSignal == "Overbought")) and 
+               ((mfiSignal == "Bearish") or (mfiSignal == "Overbought"))
+
+// Additional input for minimum candles between signals (by .trizzey)
+minCandlesBetweenSignals = input.int(15, title="Minimum Candles Between Signals")
+
+// Track the last signal bar index (by .trizzey)
+var int lastSignalBarIndex = 0
+
+// Plot buy and sell signals (by .trizzey)
+if bar_index > 0 and candlesSinceTrendChange > candlesToWait
+    if buyCondition and buySignalCount < 2 and (bar_index - lastSignalBarIndex) > minCandlesBetweenSignals
+        label.new(x=bar_index, y=high, text="BUY", color=color.green, textcolor=color.white, style=label.style_label_up, size=size.small)
+        array.push(signalBarIndexes, bar_index)
+        array.push(signalTypes, "BUY")
+        array.push(signalPrices, close)
+        buySignalCount := buySignalCount + 1
+        lastSignalBarIndex := bar_index
+    if sellCondition and sellSignalCount < 2 and (bar_index - lastSignalBarIndex) > minCandlesBetweenSignals
+        label.new(x=bar_index, y=low, text="SELL", color=color.red, textcolor=color.white, style=label.style_label_down, size=size.small)
+        array.push(signalBarIndexes, bar_index)
+        array.push(signalTypes, "SELL")
+        array.push(signalPrices, close)
+        sellSignalCount := sellSignalCount + 1
+        lastSignalBarIndex := bar_index
+
+// Calculate success rate with adjustable profit and loss conditions (by .trizzey)
+var int successCount = 0
+var int totalCount = 0
+
+// Input for profit and loss thresholds (by .trizzey)
+profitThreshold = input.float(2.0, title="Profit Threshold (%)") / 100  // Convert percentage to decimal (by .trizzey)
+lossThreshold = input.float(1.5, title="Loss Threshold (%)") / 100    // Convert percentage to decimal (by .trizzey)
+
+if array.size(signalBarIndexes) > 0
+    for i = 0 to array.size(signalBarIndexes) - 1
+        // Ensure we don't exceed the lookback limit of 5000 candles (by .trizzey)
+        if bar_index - array.get(signalBarIndexes, i) <= 5000
+            totalCount := totalCount + 1
+            var bool success = false
+            if array.get(signalTypes, i) == "BUY"
+                // Check if close price reached gain threshold (by .trizzey)
+                if high >= array.get(signalPrices, i) * (1.0 + profitThreshold)
+                    success := true
+                // Check for loss condition if not yet successful (by .trizzey)
+                if low <= array.get(signalPrices, i) * (1.0 - lossThreshold)
+                    success := false
+                    continue  // Skip counting this signal as unsuccessful due to loss (by .trizzey)
+
+            if array.get(signalTypes, i) == "SELL"
+                // Check if close price reached gain threshold (by .trizzey)
+                if low <= array.get(signalPrices, i) * (1.0 - profitThreshold)
+                    success := true
+                // Check for loss condition if not yet successful (by .trizzey)
+                if high >= array.get(signalPrices, i) * (1.0 + lossThreshold)
+                    success := false
+                    continue  // Skip counting this signal as unsuccessful due to loss (by .trizzey)
+            
+            if success
+                successCount := successCount + 1
+
+// Update success rate in main table (by .trizzey)
+if totalCount > 0
+    successRate = (successCount / totalCount) * 100
+    table.cell(resultsTable, 0, 3, "Success Rate (%)", bgcolor=color.white)
+    table.cell(resultsTable, 1, 3, str.tostring(successRate, "#.##"), bgcolor=color.white)
+// Coded by .trizzey (Discord)
+// Coded by .trizzey (Discord)
+// Coded by .trizzey (Discord)
+// Coded by .trizzey (Discord)
+// Coded by .trizzey (Discord)
